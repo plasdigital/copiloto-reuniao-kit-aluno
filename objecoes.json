@@ -1,0 +1,62 @@
+{
+  "_leia": "Os cartões do copiloto. Exemplo pronto de quem vende agentes de IA para empresas: troque pelo SEU produto. \"contexto\" diz ao Jev o que você vende. Em cada cartão, \"quando\" é o que o Jev lê para decidir (escreva como o cliente fala); empatia, pergunta e depois são o que aparece na tela. Dá para editar aqui ou na aba Minhas objeções da página.",
+  "contexto": "Reunião de vendas por vídeo. O vendedor oferece agentes de IA e automação para empresas.",
+  "objecoes": [
+    {
+      "id": "ta_caro",
+      "nome": "Tá caro",
+      "quando": "o cliente acha o preço alto, diz que está caro, pede para baixar o valor ou pede desconto",
+      "empatia": "Eu te entendo. Entendo que você pode achar caro.",
+      "pergunta": "Quando você diz que está caro, é porque acha que não vale o que eu estou cobrando, viu um concorrente que faz mais barato, ou concorda com o valor mas agora não tem orçamento?",
+      "depois": "Não vale → reapresente o valor. Concorrente → cartão do concorrente. Orçamento → compare com o custo de continuar com o problema, usando o número que ele deu. Negociador → desconto que você já levou decidido."
+    },
+    {
+      "id": "concorrente",
+      "nome": "O concorrente faz mais barato",
+      "quando": "o cliente cita outra empresa, outra proposta, outro fornecedor ou alguém que faz a mesma coisa por menos",
+      "empatia": "Entendo que você pode ter recebido outras propostas mais baratas.",
+      "pergunta": "O que ele te ofereceu? E se o meu preço e o dele fossem iguais, de quem você compraria?",
+      "depois": "Use o que ele mesmo disse como diferencial. Pergunte o que é inegociável pra ele. Custo total, não só a mensalidade."
+    },
+    {
+      "id": "vou_pensar",
+      "nome": "Vou pensar",
+      "quando": "o cliente diz que vai pensar, precisa pensar, quer analisar com calma ou dá retorno depois",
+      "empatia": "Entendo que você tem que pensar para investir no seu negócio. Eu também faço isso.",
+      "pergunta": "Quando você fala que vai pensar, o que te deixou em dúvida? É financeiro? Quer deixar pra frente? Tem que consultar alguém?",
+      "depois": "Insista, pode chutar (\"é o valor?\"). Solução é urgência: condição para quem fecha na reunião ou em 24h, e cumpra a palavra."
+    },
+    {
+      "id": "socio",
+      "nome": "Preciso falar com sócio / esposa",
+      "quando": "o cliente precisa consultar sócio, esposa, marido, diretor, chefe ou outra pessoa antes de decidir",
+      "empatia": "Faz sentido, é uma decisão importante.",
+      "pergunta": "Se dependesse só de você, você contrataria essa solução? Você concorda que ela vai aumentar suas vendas?",
+      "depois": "Validou → proponha reunião conjunta (\"eu sei falar melhor do meu produto\") ou compromisso agora com devolução se o sócio não aprovar."
+    },
+    {
+      "id": "deixar_pra_frente",
+      "nome": "Quero deixar mais pra frente",
+      "quando": "o cliente quer adiar, deixar para o mês que vem, para depois, não é o momento agora",
+      "empatia": "Entendo que você pode estar pensando em deixar pra depois.",
+      "pergunta": "O que vai mudar até o mês que vem que vai te deixar mais pronto para resolver esse problema?",
+      "depois": "Devolva as dores que ele contou: esperar 30 dias é perder mais 30 dias de vendas. Condição para quem fecha esta semana, ou proposta crescente."
+    },
+    {
+      "id": "demora",
+      "nome": "Demora muito pra implementar",
+      "quando": "o cliente acha longo o PRAZO QUE O VENDEDOR DEU para implementar a solução e quer mais rápido (não é a demora do atendimento dele hoje)",
+      "empatia": "Entendo, você quer ver resultado logo.",
+      "pergunta": "E se a gente colocar a primeira parte do agente rodando já nos primeiros 15 dias e completar o resto ao longo do prazo?",
+      "depois": "Prazo existe porque é sob medida. Solução rápida e genérica sai cara depois. Implementar por partes."
+    },
+    {
+      "id": "nao_funciona",
+      "nome": "Não acredito que funcione",
+      "quando": "o cliente duvida que funcione, desconfia de robô ou IA, já teve experiência ruim ou quer testar antes",
+      "empatia": "Normal ter essa dúvida, todo mundo quer ver funcionando.",
+      "pergunta": "Quer testar agora? Te passo o número do agente de demonstração: manda áudio, imagem, o que quiser.",
+      "depois": "Prova social no nicho dele. Explique como testar. Garantia alta de devolução para reduzir o atrito."
+    }
+  ]
+}

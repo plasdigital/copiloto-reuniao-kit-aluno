@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Copiloto de reunião</title>
+<style>
+  :root {
+    --laranja: #FA4200; --preto: #0D0900; --branco: #ECECEC; --cinza: #B5B5B5;
+    --sup: #19140c; --sup2: #231d14; --linha: #342b1f; --verde: #3ecf8e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--preto); color: var(--branco);
+    font: 15px/1.45 "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  header { position: sticky; top: 0; z-index: 2; background: var(--preto);
+    border-bottom: 1px solid var(--linha); padding: 12px 16px 10px; }
+  .topo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  h1 { font-size: 15px; letter-spacing: .08em; text-transform: uppercase; margin: 0 auto 0 0; }
+  h1 b { color: var(--laranja); }
+  button { font: inherit; border: 1px solid var(--linha); background: var(--sup2); color: var(--branco);
+    padding: 7px 12px; border-radius: 8px; cursor: pointer; }
+  button:hover { border-color: var(--cinza); }
+  button.acao { background: var(--laranja); border-color: var(--laranja); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .4; cursor: default; }
+  .abas { display: flex; gap: 4px; margin-top: 10px; }
+  .abas button { background: none; border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 4px 8px; color: var(--cinza); }
+  .abas button.ativa { color: var(--branco); border-bottom-color: var(--laranja); }
+
+  .fases { display: flex; gap: 4px; margin-top: 10px; }
+  .fases span { flex: 1; text-align: center; font-size: 11px; padding: 5px 2px; border-radius: 6px;
+    border: 1px solid var(--linha); color: var(--cinza); transition: all .25s; }
+  .fases span.agora { background: var(--laranja); border-color: var(--laranja); color: #fff; font-weight: 600; }
+
+  .canais { display: flex; gap: 14px; font-size: 12px; color: var(--cinza); margin-top: 8px; flex-wrap: wrap; }
+  .canal::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: #555; margin-right: 6px; vertical-align: 1px; }
+  .canal.on::before { background: var(--verde); box-shadow: 0 0 6px var(--verde); }
+  .canal.erro::before { background: #e5484d; }
+
+  main { padding: 14px 16px 40px; display: grid; gap: 16px; }
+  @media (min-width: 900px) { main.reuniao { grid-template-columns: 1fr 1fr; align-items: start; } }
+  section h2 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--cinza); margin: 0 0 8px; font-weight: 600; }
+
+  .vazio { color: #6d6457; font-size: 13px; padding: 18px; border: 1px dashed var(--linha); border-radius: 12px; text-align: center; }
+  .cartao { background: var(--sup); border: 1px solid var(--linha); border-left: 4px solid var(--laranja);
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; animation: entra .3s ease-out; }
+  .cartao.velho { opacity: .45; border-left-color: var(--linha); }
+  .cartao.pisca { animation: pisca .6s; }
+  @keyframes entra { from { transform: translateY(-8px); opacity: 0; } }
+  @keyframes pisca { 50% { background: var(--sup2); } }
+  .cartao .cab { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .cartao .nome { font-weight: 700; font-size: 17px; }
+  .cartao .conf { font-size: 11px; color: var(--cinza); white-space: nowrap; }
+  .cartao .disse { font-size: 12px; color: var(--cinza); font-style: italic; margin: 2px 0 10px; }
+  .cartao .empatia { color: var(--cinza); margin: 0 0 6px; }
+  .cartao .pergunta { font-size: 17px; font-weight: 600; line-height: 1.35; margin: 0 0 10px; }
+  .cartao .depois { font-size: 13px; color: var(--cinza); border-top: 1px solid var(--linha); padding-top: 8px; margin: 0; }
+
+  .dores li { font-size: 13px; margin-bottom: 4px; }
+  .dores { padding-left: 18px; margin: 0; }
+
+  .transcricao { background: var(--sup); border: 1px solid var(--linha); border-radius: 12px; padding: 10px 12px;
+    max-height: 55vh; overflow-y: auto; font-size: 14px; }
+  .fala { margin: 0 0 6px; }
+  .fala .quem { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin-right: 6px; }
+  .fala.voce .quem { color: var(--cinza); }
+  .fala.cliente .quem { color: var(--laranja); }
+  .fala.parcial { opacity: .5; }
+  .fala .marca { font-size: 11px; color: #6d6457; margin-left: 6px; }
+  .simular { display: flex; gap: 6px; margin-top: 8px; }
+  input, textarea { font: inherit; background: var(--sup2); color: var(--branco); border: 1px solid var(--linha);
+    border-radius: 8px; padding: 7px 10px; width: 100%; }
+  textarea { resize: vertical; min-height: 44px; }
+  .rodape { font-size: 12px; color: var(--cinza); display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
+
+  .obj { background: var(--sup); border: 1px solid var(--linha); border-radius: 12px; padding: 12px; margin-bottom: 12px; display: grid; gap: 6px; }
+  .obj label { font-size: 11px; color: var(--cinza); text-transform: uppercase; letter-spacing: .06em; }
+  .obj .linha { display: flex; gap: 8px; align-items: end; }
+  .aviso { font-size: 13px; color: var(--cinza); margin: 0 0 12px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <div class="topo">
+    <h1>Copiloto <b>●</b></h1>
+    <button id="ouvir" class="acao">Começar a ouvir</button>
+    <button id="parar" disabled>Parar</button>
+  </div>
+  <div class="canais">
+    <span class="canal" id="canal-voce">Você (microfone)</span>
+    <span class="canal" id="canal-cliente">Cliente (aba do Meet)</span>
+  </div>
+  <div class="fases" id="fases">
+    <span data-f="abertura">Abertura</span><span data-f="dor">Dor</span><span data-f="apresentacao">Apresentação</span><span data-f="objecao">Objeção</span><span data-f="fechamento">Fechamento</span>
+  </div>
+  <nav class="abas">
+    <button class="ativa" data-aba="reuniao">Reunião</button>
+    <button data-aba="objecoes">Minhas objeções</button>
+  </nav>
+</header>
+
+<main class="reuniao" id="aba-reuniao">
+  <div>
+    <section>
+      <h2>Quebrar objeção</h2>
+      <div id="cartoes"><div class="vazio">Quando o cliente levantar uma objeção, o cartão aparece aqui.</div></div>
+    </section>
+    <section>
+      <h2>Dores que ele contou</h2>
+      <ul class="dores" id="dores"><li style="list-style:none;margin-left:-18px;color:#6d6457">Nenhuma ainda. Use na hora do preço.</li></ul>
+    </section>
+  </div>
+  <section>
+    <h2>Conversa</h2>
+    <div class="transcricao" id="transcricao"></div>
+    <form class="simular" id="simular">
+      <input id="simular-texto" placeholder="Simular fala do cliente e Enter (teste sem reunião)">
+    </form>
+    <div class="rodape">
+      <span id="stats">0 decisões</span>
+      <a href="#" id="baixar" style="color:var(--cinza)">Baixar transcrição</a>
+    </div>
+  </section>
+</main>
+
+<main id="aba-objecoes" hidden>
+  <p class="aviso">O Jev só escolhe <b>qual</b> objeção é; o texto do cartão é este aqui. O campo "Quando" é o que ele lê para decidir, então escreva como o cliente fala.</p>
+  <div id="lista-obj"></div>
+  <div class="topo"><button id="nova-obj">+ Nova objeção</button><button id="salvar-obj" class="acao">Salvar</button><span id="salvo" class="aviso" style="margin:0"></span></div>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const CORTE = 0.6;            // certeza mínima para o cartão aparecer (a regra do vídeo)
+const REPETE_MS = 30000;      // mesma objeção dentro de 30 s só pisca o cartão, não duplica
+
+let objecoes = [];
+const conversa = [];          // { quem, texto, hora }
+const ultimoCartao = {};      // id -> { el, quando }
+let nDecisoes = 0, custoTotal = 0, msTotal = 0;
+let ouvidos = [];
+let trilhaTela = null;
+
+// ---------- abas
+document.querySelectorAll('.abas button').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('.abas button').forEach((x) => x.classList.toggle('ativa', x === b));
+  $('#aba-reuniao').hidden = b.dataset.aba !== 'reuniao';
+  $('#aba-objecoes').hidden = b.dataset.aba !== 'objecoes';
+});
+
+// ---------- objeções
+async function carregarObjecoes() {
+  objecoes = (await (await fetch('/api/objecoes')).json()).objecoes;
+  desenharObjecoes();
+}
+function desenharObjecoes() {
+  const lista = $('#lista-obj'); lista.innerHTML = '';
+  objecoes.forEach((o, i) => {
+    const d = document.createElement('div'); d.className = 'obj';
+    const campo = (k, rotulo, area) => {
+      const l = document.createElement('label'); l.textContent = rotulo;
+      const c = document.createElement(area ? 'textarea' : 'input'); c.value = o[k] || '';
+      c.oninput = () => { o[k] = c.value; $('#salvo').textContent = 'alterações não salvas'; };
+      d.append(l, c);
+    };
+    const topo = document.createElement('div'); topo.className = 'linha';
+    const n = document.createElement('input'); n.value = o.nome; n.style.fontWeight = 700;
+    n.oninput = () => { o.nome = n.value; $('#salvo').textContent = 'alterações não salvas'; };
+    const x = document.createElement('button'); x.textContent = 'Remover';
+    x.onclick = () => { objecoes.splice(i, 1); desenharObjecoes(); $('#salvo').textContent = 'alterações não salvas'; };
+    topo.append(n, x); d.append(topo);
+    campo('quando', 'Quando (o que o Jev lê)', true);
+    campo('empatia', 'Empatia');
+    campo('pergunta', 'Pergunta-chave', true);
+    campo('depois', 'Depois', true);
+    lista.append(d);
+  });
+}
+$('#nova-obj').onclick = () => {
+  objecoes.push({ id: 'obj_' + Date.now().toString(36), nome: 'Nova objeção', quando: '', empatia: '', pergunta: '', depois: '' });
+  desenharObjecoes();
+};
+$('#salvar-obj').onclick = async () => {
+  const r = await fetch('/api/objecoes', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ objecoes }) });
+  $('#salvo').textContent = r.ok ? 'salvo ✓' : 'erro ao salvar';
+};
+
+// ---------- conversa
+function linha(quem, texto, parcial) {
+  const t = $('#transcricao');
+  let el = t.querySelector(`.parcial[data-quem="${quem}"]`);   // a linha provisória vira a final
+  if (!el) {
+    el = document.createElement('p'); el.dataset.quem = quem;
+    el.innerHTML = '<span class="quem"></span><span class="txt"></span><span class="marca"></span>';
+    el.querySelector('.quem').textContent = quem;
+    t.append(el);
+  }
+  el.className = 'fala ' + (quem === 'Você' ? 'voce' : 'cliente') + (parcial ? ' parcial' : '');
+  el.querySelector('.txt').textContent = texto;
+  const perto = t.scrollHeight - t.scrollTop - t.clientHeight < 80;
+  if (perto) t.scrollTop = t.scrollHeight;
+  return el;
+}
+
+function fraseFinal(quem, texto) {
+  texto = texto.trim(); if (!texto) return;
+  const fala = linha(quem, texto, false);
+  conversa.push({ quem, texto, hora: new Date() });
+  if (quem === 'Cliente') decidir(texto, fala);
+}
+
+async function decidir(frase, el) {
+  const marca = el.querySelector('.marca'); marca.textContent = '…';
+  try {
+    const recente = conversa.slice(-9, -1).map(({ quem, texto }) => ({ quem, texto }));
+    const r = await fetch('/api/decidir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ frase, recente }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro);
+    const a = d.answers;
+    nDecisoes++; custoTotal += d.custo || 0; msTotal += d.ms;
+    $('#stats').textContent = `${nDecisoes} decisões · ${Math.round(msTotal / nDecisoes)} ms em média · US$ ${custoTotal.toFixed(5)}`;
+    marca.textContent = `${d.ms} ms`;
+
+    if (a.fase?.confidence >= 0.5) {
+      document.querySelectorAll('#fases span').forEach((s) => s.classList.toggle('agora', s.dataset.f === a.fase.choice));
+    }
+    const pObj = a.tem_objecao?.noul ?? 0, pDor = a.dor?.noul ?? 0;
+    // Regra no código, não na IA: objeção só com certeza >= 0,6, e se a frase for mais dor do que objeção, é dor.
+    if (pObj >= CORTE && a.objecao?.choice !== 'nenhuma' && a.objecao?.confidence >= CORTE && pObj >= pDor) {
+      mostrarCartao(a.objecao.choice, frase, Math.min(pObj, a.objecao.confidence));
+    }
+    if (pDor >= 0.7 && pDor > pObj) anotarDor(frase);
+  } catch (e) {
+    marca.textContent = 'erro: ' + e.message;
+  }
+}
+
+function mostrarCartao(id, frase, conf) {
+  const o = objecoes.find((x) => x.id === id); if (!o) return;
+  const antes = ultimoCartao[id];
+  if (antes && Date.now() - antes.quando < REPETE_MS) {
+    antes.el.classList.remove('pisca'); void antes.el.offsetWidth; antes.el.classList.add('pisca');
+    return;
+  }
+  const box = $('#cartoes'); box.querySelector('.vazio')?.remove();
+  box.querySelectorAll('.cartao').forEach((c) => c.classList.add('velho'));
+  const c = document.createElement('div'); c.className = 'cartao';
+  c.innerHTML = '<div class="cab"><span class="nome"></span><span class="conf"></span></div><p class="disse"></p><p class="empatia"></p><p class="pergunta"></p><p class="depois"></p>';
+  c.querySelector('.nome').textContent = o.nome;
+  c.querySelector('.conf').textContent = `certeza ${Math.round(conf * 100)}%`;
+  c.querySelector('.disse').textContent = `“${frase}”`;
+  c.querySelector('.empatia').textContent = o.empatia;
+  c.querySelector('.pergunta').textContent = o.pergunta;
+  c.querySelector('.depois').textContent = o.depois;
+  box.prepend(c);
+  box.querySelectorAll('.cartao').forEach((x, i) => { if (i > 3) x.remove(); });
+  ultimoCartao[id] = { el: c, quando: Date.now() };
+}
+
+function anotarDor(frase) {
+  const ul = $('#dores'); if (ul.dataset.tem !== '1') { ul.innerHTML = ''; ul.dataset.tem = '1'; }
+  const li = document.createElement('li'); li.textContent = frase; ul.append(li);
+}
+
+$('#simular').onsubmit = (e) => { e.preventDefault(); const v = $('#simular-texto').value; $('#simular-texto').value = ''; fraseFinal('Cliente', v); };
+
+$('#baixar').onclick = (e) => {
+  e.preventDefault();
+  const txt = conversa.map((f) => `[${f.hora.toLocaleTimeString('pt-BR')}] ${f.quem}: ${f.texto}`).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }));
+  a.download = `reuniao-${new Date().toISOString().slice(0, 16).replace(':', 'h')}.txt`; a.click();
+};
+
+// ---------- ouvido: transcrição grátis do Chrome (Web Speech API), dois canais
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+function criarOuvido(quem, idCanal, trilha) {
+  const canal = $(idCanal);
+  const r = new SR(); r.lang = 'pt-BR'; r.continuous = true; r.interimResults = true;
+  let ativo = true;
+  const iniciar = () => { try { trilha ? r.start(trilha) : r.start(); } catch (e) { /* já rodando */ } };
+  r.onstart = () => { canal.className = 'canal on'; };
+  r.onresult = (e) => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const res = e.results[i];
+      if (res.isFinal) fraseFinal(quem, res[0].transcript);
+      else linha(quem, res[0].transcript, true);
+    }
+  };
+  r.onerror = (e) => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    canal.className = 'canal erro'; canal.title = e.error;
+    canal.textContent = `${quem}: erro (${e.error})`;
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') ativo = false;
+  };
+  // O Chrome encerra a escuta depois de um silêncio: religa sozinho enquanto estiver ouvindo.
+  r.onend = () => {
+    if (ativo && (!trilha || trilha.readyState === 'live')) setTimeout(iniciar, 150);
+    else canal.className = 'canal';
+  };
+  iniciar();
+  return { parar() { ativo = false; try { r.stop(); } catch {} canal.className = 'canal'; } };
+}
+
+$('#ouvir').onclick = async () => {
+  if (!SR) return alert('Este navegador não tem a transcrição do Chrome. Abra no Google Chrome.');
+  let tela;
+  try {
+    tela = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true, selfBrowserSurface: 'exclude', systemAudio: 'include' });
+  } catch { return; }
+  const audio = tela.getAudioTracks()[0];
+  if (!audio) {
+    tela.getTracks().forEach((t) => t.stop());
+    return alert('Sem áudio. Escolha a aba do Meet e deixe marcado "Compartilhar áudio da guia".');
+  }
+  trilhaTela = tela;
+  ouvidos = [criarOuvido('Cliente', '#canal-cliente', audio), criarOuvido('Você', '#canal-voce', null)];
+  audio.onended = () => $('#parar').click();
+  $('#ouvir').disabled = true; $('#parar').disabled = false;
+};
+
+$('#parar').onclick = () => {
+  ouvidos.forEach((o) => o.parar()); ouvidos = [];
+  trilhaTela?.getTracks().forEach((t) => t.stop()); trilhaTela = null;
+  $('#ouvir').disabled = false; $('#parar').disabled = true;
+};
+
+carregarObjecoes();
+</script>
+</body>
+</html>
