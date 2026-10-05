@@ -1,27 +1,35 @@
 # Como funciona: da fala do cliente ao cartão
 
 ```
-Microfone = VOCÊ ──────┐
-                       ├─► Chrome transcreve ─► frase final do CLIENTE ─► Jev decide ─► regra no código ─► cartão
-Aba do Meet = CLIENTE ─┘   (Web Speech API)      + 8 falas anteriores      5 perguntas    certeza ≥ 0,6
+Aba do Meet = CLIENTE ─► transcrição ─────────► frase final do CLIENTE ─► Jev decide ─► regra no código ─► cartão
+                         Chrome (grátis)         + 8 falas anteriores      5 perguntas    certeza ≥ 0,6
+                         ou OpenAI (~US$ 1/h)
 ```
 
-## 1. Os dois ouvidos
+## 1. O ouvido: duas opções, você escolhe no topo da página
 
-A página abre duas escutas da transcrição do próprio Chrome (`SpeechRecognition`, em pt-BR):
+Quando você clica em **Começar a ouvir**, o Chrome pede para escolher uma aba; o som dela (a voz do
+cliente) vira uma faixa de áudio. Quem transforma essa faixa em texto é o **ouvido**, escolhido no campo
+**Transcrição** do cabeçalho:
 
-- **Você:** o microfone, pelo `start()` normal.
-- **Cliente:** o áudio da aba do Meet. Quando você clica em **Começar a ouvir**, o Chrome pede para
-  escolher uma aba; o som dela vira uma faixa de áudio, que vai para o `start(trilha)`. Esse recurso
-  é recente no Chrome, por isso ele precisa estar atualizado.
+| Ouvido | Custo | Como funciona |
+|---|---|---|
+| **Chrome · grátis** | R$ 0 | a transcrição do próprio Chrome (`SpeechRecognition`, pt-BR), pelo `start(trilha)`. Recurso recente: o Chrome precisa estar atualizado. O áudio vai para o serviço de voz do Google |
+| **OpenAI** | ~US$ 0,017/min (~US$ 1/hora) | `gpt-live-transcribe` por WebRTC. O servidor pede uma senha temporária à OpenAI (`POST /api/transcricao`) e a página manda o áudio direto para ela. A chave fica no servidor |
 
-Só a frase **final** do cliente vai para a IA. A sua fala e as frases parciais (as que ainda estão
-mudando, em cinza) só aparecem na conversa.
+Trocar o ouvido **não muda o resto**: os dois entregam a frase final para o mesmo lugar (`fraseFinal()` no
+`index.html`), e dali para o Jev. Só a frase **final** do cliente vai para a IA; as parciais (as que
+ainda estão mudando, em cinza) só aparecem na conversa. A sua voz não é transcrita.
 
-A transcrição não custa nada, mas não é feita no seu computador: o Chrome manda o áudio para o serviço
-de voz do Google. Por isso precisa de internet.
+Diferenças que você vai notar:
+- **Chrome:** encerra a escuta depois de um silêncio, e a página religa sozinha. Às vezes junta várias
+  frases numa só.
+- **OpenAI:** o modelo não decide sozinho quando a frase acabou. A página mede o volume e fecha a frase
+  depois de 0,7 s de silêncio (`SILENCIO_MS` no `index.html`).
 
-O Chrome encerra a escuta depois de um silêncio. A página religa sozinha enquanto você estiver ouvindo.
+Quer outro provedor (Deepgram, AssemblyAI, Whisper no seu PC)? O lugar é o mesmo: uma função
+`ouvidoX(quem, idCanal, trilha)` no `index.html` que chame `fraseFinal()`, e, se ele precisar de chave,
+uma rota no `servidor.mjs` como a `/api/transcricao`. Peça ao Claude Code.
 
 ## 2. O Jev decide
 
@@ -69,17 +77,32 @@ A IA dá a certeza; quem decide mostrar é a página (`decidir()` no `index.html
 
 Os números estão no topo do `<script>` do `index.html` (`CORTE`, `REPETE_MS`).
 
+## 3b. Cada reunião fica salva
+
+Na primeira fala, a página abre uma reunião nova e a salva a cada frase (e no **Parar**) na pasta
+`reunioes/`, com o nome `AAAA-MM-DD-HHhMMmSS`:
+
+- **`.md`**, para ler: com quem foi, duração, objeções que apareceram, dores, suas notas e a conversa
+  inteira. Cada frase do cliente leva entre parênteses o cartão que apareceu, a dor anotada ou a
+  objeção que a IA **quase** escolheu, abaixo do corte. É assim que você descobre qual `quando` ajustar.
+- **`.json`**, para a página reabrir na aba **Reuniões salvas**.
+
+**Nova reunião** salva a atual e limpa a tela. Se o servidor não responder, a tela não é limpa.
+
 ## 4. Custo, tempo e segurança
 
-- **Custo:** cerca de US$ 0,00004 por frase do cliente (medido em 24/set/2026). A transcrição é de graça.
+- **Custo:** cerca de US$ 0,00004 por frase do cliente no Jev (medido em 24/set/2026). A transcrição é de
+  graça no Chrome, ou ~US$ 1 por hora na OpenAI.
 - **Tempo:** cerca de 300 ms por decisão; a primeira chamada pode demorar mais.
-- **A chave** fica no `.env.local` e só o `servidor.mjs` a lê. O navegador nunca a vê.
+- **As chaves** ficam no `.env.local` e só o `servidor.mjs` as lê. O navegador nunca as vê: para a OpenAI,
+  a página recebe só uma senha temporária, que vale um minuto para abrir a conexão.
 - **O servidor** escuta só em `127.0.0.1`: ninguém da sua rede abre a página.
-- **A conversa** não é gravada em disco. "Baixar transcrição" salva um `.txt` só quando você clica.
+- **A conversa** fica só no seu computador, na pasta `reunioes/` (fora do git). Nada vai para a nuvem além
+  do que já foi dito acima: o áudio para a transcrição (Google ou OpenAI) e cada frase do cliente para o Jev.
 
 ## Ainda não testado
 
-- Os dois canais ao mesmo tempo numa reunião longa de verdade (se o Chrome segura as duas escutas a
-  reunião inteira).
+- Uma reunião longa de verdade no Meet com cada um dos ouvidos (os dois foram testados com uma fala
+  gravada em português no lugar da aba).
 - Outros aplicativos de reunião além do Meet: qualquer um que rode numa aba do Chrome deveria
   funcionar, porque o que a página ouve é o som da aba.

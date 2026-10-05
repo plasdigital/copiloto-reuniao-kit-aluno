@@ -36,6 +36,9 @@
     background: #555; margin-right: 6px; vertical-align: 1px; }
   .canal.on::before { background: var(--verde); box-shadow: 0 0 6px var(--verde); }
   .canal.erro::before { background: #e5484d; }
+  .mic { cursor: pointer; } .mic input { width: auto; margin: 0 4px 0 0; vertical-align: -1px; }
+  .ouvido select { font: inherit; font-size: 12px; background: var(--sup2); color: var(--branco); border: 1px solid var(--linha);
+    border-radius: 6px; padding: 2px 6px; margin-left: 4px; }
 
   main { padding: 14px 16px 40px; display: grid; gap: 16px; }
   @media (min-width: 900px) { main.reuniao { grid-template-columns: 1fr 1fr; align-items: start; } }
@@ -77,6 +80,14 @@
   .obj label { font-size: 11px; color: var(--cinza); text-transform: uppercase; letter-spacing: .06em; }
   .obj .linha { display: flex; gap: 8px; align-items: end; }
   .aviso { font-size: 13px; color: var(--cinza); margin: 0 0 12px; }
+  .cliente { margin-top: 10px; }
+  .salva { background: var(--sup); border: 1px solid var(--linha); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px;
+    cursor: pointer; display: grid; gap: 2px; }
+  .salva:hover, .salva.aberta { border-color: var(--laranja); }
+  .salva b { font-size: 15px; }
+  .salva span { font-size: 12px; color: var(--cinza); }
+  .leitura { background: var(--sup); border: 1px solid var(--linha); border-radius: 12px; padding: 14px 16px;
+    white-space: pre-wrap; font: 14px/1.5 "Helvetica Neue", Helvetica, Arial, sans-serif; margin: 0; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -86,10 +97,17 @@
     <h1>Copiloto <b>●</b></h1>
     <button id="ouvir" class="acao">Começar a ouvir</button>
     <button id="parar" disabled>Parar</button>
+    <button id="nova" title="Salva esta reunião e limpa a tela para a próxima">Nova reunião</button>
   </div>
+  <input id="cliente" class="cliente" placeholder="Com quem é a reunião? (nome do cliente ou da empresa)">
   <div class="canais">
-    <span class="canal" id="canal-voce">Você (microfone)</span>
     <span class="canal" id="canal-cliente">Cliente (aba do Meet)</span>
+    <label class="ouvido" title="Quem transforma a fala em texto. Trocar não muda o resto: o Jev e os cartões são os mesmos.">Transcrição
+      <select id="ouvido">
+        <option value="chrome">Chrome · grátis</option>
+        <option value="openai">OpenAI · ~US$ 1/hora</option>
+      </select>
+    </label>
   </div>
   <div class="fases" id="fases">
     <span data-f="abertura">Abertura</span><span data-f="dor">Dor</span><span data-f="apresentacao">Apresentação</span><span data-f="objecao">Objeção</span><span data-f="fechamento">Fechamento</span>
@@ -97,6 +115,7 @@
   <nav class="abas">
     <button class="ativa" data-aba="reuniao">Reunião</button>
     <button data-aba="objecoes">Minhas objeções</button>
+    <button data-aba="salvas">Reuniões salvas</button>
   </nav>
 </header>
 
@@ -110,6 +129,10 @@
       <h2>Dores que ele contou</h2>
       <ul class="dores" id="dores"><li style="list-style:none;margin-left:-18px;color:#6d6457">Nenhuma ainda. Use na hora do preço.</li></ul>
     </section>
+    <section>
+      <h2>Suas notas</h2>
+      <textarea id="notas" placeholder="Próximo passo, valor combinado, o que ficou de mandar… (vai junto quando salvar)"></textarea>
+    </section>
   </div>
   <section>
     <h2>Conversa</h2>
@@ -119,9 +142,16 @@
     </form>
     <div class="rodape">
       <span id="stats">0 decisões</span>
+      <span id="salvo-reuniao"></span>
       <a href="#" id="baixar" style="color:var(--cinza)">Baixar transcrição</a>
     </div>
   </section>
+</main>
+
+<main id="aba-salvas" hidden>
+  <p class="aviso">Cada reunião se salva sozinha enquanto acontece, na pasta <code>reunioes/</code> do copiloto: um <code>.md</code> para ler e um <code>.json</code>. Clique numa para ver.</p>
+  <div id="lista-salvas"></div>
+  <pre class="leitura" id="leitura" hidden></pre>
 </main>
 
 <main id="aba-objecoes" hidden>
@@ -141,13 +171,83 @@ const ultimoCartao = {};      // id -> { el, quando }
 let nDecisoes = 0, custoTotal = 0, msTotal = 0;
 let ouvidos = [];
 let trilhaTela = null;
+let reuniao = novaReuniao();  // o que é salvo em reunioes/ (a conversa vai junto)
 
 // ---------- abas
 document.querySelectorAll('.abas button').forEach((b) => b.onclick = () => {
   document.querySelectorAll('.abas button').forEach((x) => x.classList.toggle('ativa', x === b));
   $('#aba-reuniao').hidden = b.dataset.aba !== 'reuniao';
   $('#aba-objecoes').hidden = b.dataset.aba !== 'objecoes';
+  $('#aba-salvas').hidden = b.dataset.aba !== 'salvas';
+  if (b.dataset.aba === 'salvas') listarSalvas();
 });
+
+// ---------- reunião salva: começa na primeira fala, se salva a cada frase e no Parar
+function novaReuniao() {
+  return { id: null, inicio: null, fase: null, cartoes: [], dores: [] };
+}
+const dois = (n) => String(n).padStart(2, '0');
+function idDaReuniao(d) {
+  return `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}-${dois(d.getHours())}h${dois(d.getMinutes())}m${dois(d.getSeconds())}`;
+}
+
+let timerSalvar = null;
+function agendarSalvar() { clearTimeout(timerSalvar); timerSalvar = setTimeout(salvarReuniao, 1500); }
+
+async function salvarReuniao() {
+  clearTimeout(timerSalvar);
+  if (!reuniao.id || !conversa.length) return true;
+  const corpo = {
+    ...reuniao, fim: new Date(), cliente: $('#cliente').value.trim(), notas: $('#notas').value,
+    decisoes: nDecisoes, custo: custoTotal, conversa,
+  };
+  try {
+    const r = await fetch(`/api/reunioes/${reuniao.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+    if (!r.ok) throw new Error((await r.json()).erro);
+    $('#salvo-reuniao').textContent = `salva às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} ✓`;
+    return true;
+  } catch (e) {
+    $('#salvo-reuniao').textContent = 'não salvou: ' + e.message;
+    return false;
+  }
+}
+$('#cliente').oninput = agendarSalvar;
+$('#notas').oninput = agendarSalvar;
+
+$('#nova').onclick = async () => {
+  if (ouvidos.length) $('#parar').click();
+  if (!(await salvarReuniao())) return alert('A reunião não foi salva (o servidor está no ar?). A tela não foi limpa.');
+  conversa.length = 0; reuniao = novaReuniao();
+  nDecisoes = 0; custoTotal = 0; msTotal = 0;
+  Object.keys(ultimoCartao).forEach((k) => delete ultimoCartao[k]);
+  $('#transcricao').innerHTML = '';
+  $('#cartoes').innerHTML = '<div class="vazio">Quando o cliente levantar uma objeção, o cartão aparece aqui.</div>';
+  $('#dores').innerHTML = '<li style="list-style:none;margin-left:-18px;color:#6d6457">Nenhuma ainda. Use na hora do preço.</li>';
+  delete $('#dores').dataset.tem;
+  document.querySelectorAll('#fases span').forEach((s) => s.classList.remove('agora'));
+  $('#cliente').value = ''; $('#notas').value = '';
+  $('#stats').textContent = '0 decisões'; $('#salvo-reuniao').textContent = '';
+};
+
+async function listarSalvas() {
+  const box = $('#lista-salvas'); $('#leitura').hidden = true;
+  const lista = await (await fetch('/api/reunioes')).json();
+  box.innerHTML = lista.length ? '' : '<div class="vazio">Nenhuma reunião salva ainda.</div>';
+  for (const r of lista) {
+    const d = document.createElement('div'); d.className = 'salva';
+    const ini = new Date(r.inicio);
+    d.innerHTML = '<b></b><span></span>';
+    d.querySelector('b').textContent = `${r.cliente || 'Sem nome'} · ${ini.toLocaleDateString('pt-BR')} ${ini.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    d.querySelector('span').textContent = `${r.falas} falas · ` + (r.cartoes.length ? `objeções: ${[...new Set(r.cartoes)].join(', ')}` : 'nenhuma objeção');
+    d.onclick = async () => {
+      box.querySelectorAll('.salva').forEach((x) => x.classList.toggle('aberta', x === d));
+      $('#leitura').textContent = await (await fetch(`/api/reunioes/${r.id}.md`)).text();
+      $('#leitura').hidden = false;
+      $('#leitura').scrollIntoView({ behavior: 'smooth' });
+    };
+    box.append(d);
+  }
+}
 
 // ---------- objeções
 async function carregarObjecoes() {
@@ -206,11 +306,15 @@ function linha(quem, texto, parcial) {
 function fraseFinal(quem, texto) {
   texto = texto.trim(); if (!texto) return;
   const fala = linha(quem, texto, false);
-  conversa.push({ quem, texto, hora: new Date() });
-  if (quem === 'Cliente') decidir(texto, fala);
+  const hora = new Date();
+  if (!reuniao.id) { reuniao.id = idDaReuniao(hora); reuniao.inicio = hora; }
+  const registro = { quem, texto, hora };
+  conversa.push(registro);
+  agendarSalvar();
+  if (quem === 'Cliente') decidir(texto, fala, registro);
 }
 
-async function decidir(frase, el) {
+async function decidir(frase, el, registro) {
   const marca = el.querySelector('.marca'); marca.textContent = '…';
   try {
     const recente = conversa.slice(-9, -1).map(({ quem, texto }) => ({ quem, texto }));
@@ -224,13 +328,17 @@ async function decidir(frase, el) {
 
     if (a.fase?.confidence >= 0.5) {
       document.querySelectorAll('#fases span').forEach((s) => s.classList.toggle('agora', s.dataset.f === a.fase.choice));
+      reuniao.fase = a.fase.choice;
     }
     const pObj = a.tem_objecao?.noul ?? 0, pDor = a.dor?.noul ?? 0;
+    // O que a IA respondeu fica na reunião salva, para ajustar o "quando" dos cartões depois.
+    registro.jev = { objecao: a.objecao?.choice, certeza: Math.min(pObj, a.objecao?.confidence ?? 0), tem_objecao: pObj, dor: pDor, fase: a.fase?.choice };
     // Regra no código, não na IA: objeção só com certeza >= 0,6, e se a frase for mais dor do que objeção, é dor.
     if (pObj >= CORTE && a.objecao?.choice !== 'nenhuma' && a.objecao?.confidence >= CORTE && pObj >= pDor) {
-      mostrarCartao(a.objecao.choice, frase, Math.min(pObj, a.objecao.confidence));
+      registro.cartao = mostrarCartao(a.objecao.choice, frase, Math.min(pObj, a.objecao.confidence));
     }
-    if (pDor >= 0.7 && pDor > pObj) anotarDor(frase);
+    if (pDor >= 0.7 && pDor > pObj) { anotarDor(frase); registro.dor = true; reuniao.dores.push({ frase, hora: registro.hora }); }
+    agendarSalvar();
   } catch (e) {
     marca.textContent = 'erro: ' + e.message;
   }
@@ -241,8 +349,9 @@ function mostrarCartao(id, frase, conf) {
   const antes = ultimoCartao[id];
   if (antes && Date.now() - antes.quando < REPETE_MS) {
     antes.el.classList.remove('pisca'); void antes.el.offsetWidth; antes.el.classList.add('pisca');
-    return;
+    return o.nome;
   }
+  reuniao.cartoes.push({ id, nome: o.nome, frase, conf, hora: new Date() });
   const box = $('#cartoes'); box.querySelector('.vazio')?.remove();
   box.querySelectorAll('.cartao').forEach((c) => c.classList.add('velho'));
   const c = document.createElement('div'); c.className = 'cartao';
@@ -256,6 +365,7 @@ function mostrarCartao(id, frase, conf) {
   box.prepend(c);
   box.querySelectorAll('.cartao').forEach((x, i) => { if (i > 3) x.remove(); });
   ultimoCartao[id] = { el: c, quando: Date.now() };
+  return o.nome;
 }
 
 function anotarDor(frase) {
@@ -273,15 +383,25 @@ $('#baixar').onclick = (e) => {
   a.download = `reuniao-${new Date().toISOString().slice(0, 16).replace(':', 'h')}.txt`; a.click();
 };
 
-// ---------- ouvido: transcrição grátis do Chrome (Web Speech API), dois canais
+// ---------- ouvido: quem transforma a fala do cliente em texto. Duas opções, escolhidas no cabeçalho.
+// Trocar o ouvido não mexe no resto: as duas entregam a frase final para fraseFinal(), e dali para o Jev.
+function criarOuvido(quem, idCanal, trilha) {
+  return $('#ouvido').value === 'openai' ? ouvidoOpenAI(quem, idCanal, trilha) : ouvidoChrome(quem, idCanal, trilha);
+}
+
+// Opção 1 · Chrome (Web Speech API), grátis. O áudio vai para o serviço de transcrição do Google.
+// Num Chrome em 05/out/2026 ela deu "network" só em português (num perfil limpo do Chrome, funcionou).
+// Se acontecer com você, troque para a OpenAI no cabeçalho.
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-function criarOuvido(quem, idCanal, trilha) {
+function ouvidoChrome(quem, idCanal, trilha) {
   const canal = $(idCanal);
+  canal.textContent = canal.dataset.nome ||= canal.textContent;   // limpa o erro da escuta anterior
   const r = new SR(); r.lang = 'pt-BR'; r.continuous = true; r.interimResults = true;
-  let ativo = true;
-  const iniciar = () => { try { trilha ? r.start(trilha) : r.start(); } catch (e) { /* já rodando */ } };
-  r.onstart = () => { canal.className = 'canal on'; };
+  let ativo = true, espera = 150;
+  const iniciar = () => { try { r.start(trilha); } catch (e) { /* já rodando */ } };
+  r.onstart = () => { canal.className = 'canal on'; canal.textContent = canal.dataset.nome; canal.title = ''; };
+  r.onaudiostart = () => { espera = 150; };
   r.onresult = (e) => {
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const res = e.results[i];
@@ -294,18 +414,104 @@ function criarOuvido(quem, idCanal, trilha) {
     canal.className = 'canal erro'; canal.title = e.error;
     canal.textContent = `${quem}: erro (${e.error})`;
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') ativo = false;
+    // "network" = o serviço do Google não respondeu: tenta de novo, cada vez mais devagar
+    if (e.error === 'network') espera = Math.min(espera * 2 + 500, 8000);
   };
   // O Chrome encerra a escuta depois de um silêncio: religa sozinho enquanto estiver ouvindo.
   r.onend = () => {
-    if (ativo && (!trilha || trilha.readyState === 'live')) setTimeout(iniciar, 150);
+    if (ativo && trilha.readyState === 'live') setTimeout(iniciar, espera);
     else canal.className = 'canal';
   };
   iniciar();
   return { parar() { ativo = false; try { r.stop(); } catch {} canal.className = 'canal'; } };
 }
 
+// Opção 2 · OpenAI (gpt-live-transcribe) por WebRTC, ~US$ 0,017 por minuto. A página pede ao servidor uma
+// senha temporária e manda o áudio da aba direto para a OpenAI; a chave de verdade não sai do servidor.
+// O modelo não decide sozinho quando a frase acabou: quem fecha a frase é o volume (fala, depois silêncio).
+const VOLUME_FALA = 0.012, SILENCIO_MS = 700, FRASE_MAX_MS = 15000;
+
+function ouvidoOpenAI(quem, idCanal, trilha) {
+  const canal = $(idCanal);
+  canal.textContent = canal.dataset.nome ||= canal.textContent;   // limpa o erro da escuta anterior
+  let ativo = true, pc = null, dc = null, espera = 1000, religar = null;
+  const textos = {};   // item_id → texto parcial
+  const erro = (msg) => { canal.className = 'canal erro'; canal.title = msg; canal.textContent = `${quem}: erro (${msg})`; };
+
+  // Volume da trilha: decide quando a frase terminou e manda a OpenAI fechar o texto.
+  const ctx = new AudioContext();
+  const medidor = ctx.createAnalyser(); medidor.fftSize = 1024;
+  ctx.createMediaStreamSource(new MediaStream([trilha])).connect(medidor);
+  const amostras = new Float32Array(medidor.fftSize);
+  let falandoDesde = 0, ultimoSom = 0;
+  const vad = setInterval(() => {
+    medidor.getFloatTimeDomainData(amostras);
+    let soma = 0; for (const x of amostras) soma += x * x;
+    const agora = Date.now();
+    if (Math.sqrt(soma / amostras.length) > VOLUME_FALA) { ultimoSom = agora; falandoDesde ||= agora; }
+    if (falandoDesde && (agora - ultimoSom > SILENCIO_MS || agora - falandoDesde > FRASE_MAX_MS)) {
+      falandoDesde = 0;
+      if (dc?.readyState === 'open') dc.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+    }
+  }, 50);
+
+  async function conectar() {
+    const t = await fetch('/api/transcricao', { method: 'POST' });
+    const { value, erro: e } = await t.json();
+    if (!value) throw new Error(e || 'sem senha da OpenAI');
+    pc = new RTCPeerConnection();
+    pc.addTrack(trilha);
+    dc = pc.createDataChannel('oai-events');
+    dc.onopen = () => { espera = 1000; canal.className = 'canal on'; canal.textContent = canal.dataset.nome; canal.title = ''; };
+    dc.onmessage = (m) => {
+      const ev = JSON.parse(m.data);
+      if (ev.type === 'conversation.item.input_audio_transcription.delta') {
+        textos[ev.item_id] = (textos[ev.item_id] || '') + ev.delta;
+        linha(quem, textos[ev.item_id], true);
+      } else if (ev.type === 'conversation.item.input_audio_transcription.completed') {
+        delete textos[ev.item_id];
+        fraseFinal(quem, ev.transcript || '');
+      } else if (ev.type === 'error') {
+        console.warn('OpenAI', ev.error);
+        if (ev.error?.code !== 'input_audio_buffer_commit_empty') erro(ev.error?.message || 'erro da OpenAI');
+      }
+    };
+    pc.onconnectionstatechange = () => {
+      if (['failed', 'disconnected', 'closed'].includes(pc.connectionState) && ativo) cair('conexão caiu');
+    };
+    const oferta = await pc.createOffer();
+    await pc.setLocalDescription(oferta);
+    const r = await fetch('https://api.openai.com/v1/realtime/calls', {
+      method: 'POST', body: oferta.sdp,
+      headers: { Authorization: `Bearer ${value}`, 'Content-Type': 'application/sdp' },
+    });
+    if (!r.ok) throw new Error(`OpenAI ${r.status}: ${(await r.text()).slice(0, 160)}`);
+    await pc.setRemoteDescription({ type: 'answer', sdp: await r.text() });
+  }
+
+  // Caiu: avisa e religa sozinho, cada vez mais devagar (até 30 s), enquanto estiver ouvindo.
+  function cair(msg) {
+    erro(msg);
+    try { pc?.close(); } catch {}
+    pc = dc = null;
+    if (!ativo || religar || trilha.readyState !== 'live') return;
+    religar = setTimeout(() => { religar = null; iniciar(); }, espera);
+    espera = Math.min(espera * 2, 30000);
+  }
+  const iniciar = () => conectar().catch((e) => cair(e.message));
+  iniciar();
+
+  return {
+    parar() {
+      ativo = false; clearInterval(vad); clearTimeout(religar);
+      try { pc?.close(); } catch {} ctx.close();
+      canal.className = 'canal';
+    },
+  };
+}
+
 $('#ouvir').onclick = async () => {
-  if (!SR) return alert('Este navegador não tem a transcrição do Chrome. Abra no Google Chrome.');
+  if ($('#ouvido').value === 'chrome' && !SR) return alert('Este navegador não tem a transcrição do Chrome. Abra no Google Chrome ou troque para a OpenAI.');
   let tela;
   try {
     tela = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true, selfBrowserSurface: 'exclude', systemAudio: 'include' });
@@ -316,16 +522,29 @@ $('#ouvir').onclick = async () => {
     return alert('Sem áudio. Escolha a aba do Meet e deixe marcado "Compartilhar áudio da guia".');
   }
   trilhaTela = tela;
-  ouvidos = [criarOuvido('Cliente', '#canal-cliente', audio), criarOuvido('Você', '#canal-voce', null)];
+  ouvidos = [criarOuvido('Cliente', '#canal-cliente', audio)];
   audio.onended = () => $('#parar').click();
-  $('#ouvir').disabled = true; $('#parar').disabled = false;
+  $('#ouvir').disabled = true; $('#parar').disabled = false; $('#ouvido').disabled = true;
 };
 
 $('#parar').onclick = () => {
   ouvidos.forEach((o) => o.parar()); ouvidos = [];
   trilhaTela?.getTracks().forEach((t) => t.stop()); trilhaTela = null;
-  $('#ouvir').disabled = false; $('#parar').disabled = true;
+  $('#ouvir').disabled = false; $('#parar').disabled = true; $('#ouvido').disabled = false;
+  salvarReuniao();
 };
+
+// Qual ouvido: o que você escolheu da última vez; na primeira vez, a OpenAI se o servidor tiver a chave,
+// senão o Chrome grátis. Sem chave, a opção OpenAI fica desligada.
+(async () => {
+  let openai = false, salvo = null;
+  try { openai = (await (await fetch('/api/transcricao')).json()).openai; } catch {}
+  try { salvo = localStorage.getItem('copiloto-ouvido'); } catch {}
+  const opcao = $('#ouvido option[value="openai"]');
+  if (!openai) { opcao.disabled = true; opcao.textContent = 'OpenAI · sem chave no .env.local'; }
+  $('#ouvido').value = openai && salvo !== 'chrome' ? (salvo || 'openai') : 'chrome';
+})();
+$('#ouvido').onchange = () => { try { localStorage.setItem('copiloto-ouvido', $('#ouvido').value); } catch {} };
 
 carregarObjecoes();
 </script>
