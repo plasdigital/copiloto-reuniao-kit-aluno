@@ -83,4 +83,4 @@ depois que ele termina a frase.
 A reunião se salva sozinha a cada frase, na pasta `reunioes/`. Acabou? Clique em **Parar** e depois em
 **Nova reunião**, que limpa a tela para a próxima. As antigas ficam na aba **Reuniões salvas**.
 
-Deu erro? Veja as armadilhas no fim do [CLAUDE.md](CLAUDE.md), ou peça ao Claude Code: "deu esse erro, o que é?".
+Deu erro? Veja as armadilhas no fim do [AGENTS.md](AGENTS.md), ou peça ao Claude Code: "deu esse erro, o que é?".
